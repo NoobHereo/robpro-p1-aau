@@ -20,9 +20,9 @@ Zumo32U4ButtonA ButtonA;
 Zumo32U4IMU IMU;
 
 //Booleans that help the robot know how far in the process it is
-bool GoalAngleReached, LineFound, findIR;
+bool GoalAngleReached, LineFound, SensorStateCheck;
 
-bool turnedDone = false; 
+bool TurnComplete = false; 
 bool CanDetected = false; 
 bool SmallCanDetected = false; 
 bool LargeCanDetected = false; 
@@ -84,6 +84,10 @@ void loop() {
     ReturnToHome();
 }
 
+/// <summary>
+/// Configures all hardware components before initialising the drive and can detection
+/// process
+/// </summary>
 void ConfigureComponents()
 {
     Serial.begin(SERIAL_FREQUENCY); // This is for debugging
@@ -101,6 +105,9 @@ void ConfigureComponents()
     ButtonA.waitForPress();
 }
 
+/// <summary>
+/// Returns the robot to it's start position
+/// </summary>
 void ReturnToHome()
 {
     while (!ReturnedHome)
@@ -191,7 +198,9 @@ void ReturnToHome()
     ReturnedHome = false;
 }
 
-//Function for detecing can type and initializing can pushing sequences
+/// <summary>
+/// Identifies the object in front of the robot as either a large or small can
+/// </summary>
 void DetectCan()
 {
     while (!CanDetected)
@@ -214,7 +223,10 @@ void DetectCan()
     }
 }
 
-//Function for pushing large can into bin. (Goes around the belt and pushes)
+/// <summary>
+/// Handles the registration of a large canned object in front of the robot.
+/// The robot will proceed to push the object around the belt and forward into a container/bucket.
+/// </summary>
 void HandleLargeCan()
 {
     //Back up off of sensor to stop conveyor
@@ -251,7 +263,10 @@ void HandleLargeCan()
     Motors.setSpeeds(0, 0);
 }
 
-//Pushing function for small can (Push forward)  
+/// <summary>
+/// Handles the registration of a small canned object in front of the robot.
+/// The robot will proceed to push the object forward into a container/bucket.
+/// </summary>
 void HandleSmallCan() {
     Motors.setSpeeds(MOTOR_SPEED, MOTOR_SPEED);
     delay(200);
@@ -375,11 +390,11 @@ void FindLine()
         }
     }
 
-    while (LineFound && !findIR) 
+    while (LineFound && !SensorStateCheck) 
     {
-        if (!turnedDone) {
+        if (!TurnComplete) {
             Turn(90, 'R');
-            turnedDone = true;
+            TurnComplete = true;
         }
 
         Motors.setSpeeds(MOTOR_SPEED * 0.75, MOTOR_SPEED);
@@ -388,7 +403,7 @@ void FindLine()
         if (SensorStates.Left && SensorStates.Right) {
             delay(200);
             Motors.setSpeeds(0, 0);
-            findIR = true;
+            SensorStateCheck = true;
         }
         else if (!SensorStates.Left && SensorStates.Right) {
             Motors.setSpeeds(MOTOR_SPEED, 0);
@@ -400,7 +415,7 @@ void FindLine()
         }
     }
     Motors.setSpeeds(0, 0);
-    turnedDone = false;
+    TurnComplete = false;
 }
 
 /// <summary>
@@ -449,7 +464,9 @@ void HandleSensorData(LineSensorsWhite& state)
     }
 }
 
-//Code for using gyro
+/// <summary>
+/// Setup function for the Zumo32U4's IMU and Gyroscope
+/// </summary>
 void GyroscopeSetup()
 {
     Wire.begin();
@@ -467,8 +484,9 @@ void GyroscopeSetup()
     delay(500);
 
     // Calibrate the gyro.
+    int sampleIterations = 1024;
     int32_t total = 0;
-    for (uint16_t i = 0; i < 1024; i++)
+    for (uint16_t i = 0; i < sampleIterations; i++)
     {
         // Wait for new data to be available, then read it.
         while (!IMU.gyroDataReady()) {}
@@ -478,20 +496,25 @@ void GyroscopeSetup()
         total += IMU.g.z;
     }
     ledYellow(0);
-    gyroOffset = total / 1024;
+    gyroOffset = total / sampleIterations;
 
     // Display the angle (in degrees from -180 to 180) until the
     // user presses A.
     LCD.clear();
 }
 
-
+/// <summary>
+/// Resets the gyroscope angle and sets the last update to be TODO: Micros
+/// </summary>
 void GyroscopeReset()
 {
     gyroLastUpdate = micros();
     turnAngle = 0;
 }
 
+/// <summary>
+/// IMU Gyrscope setup function. TODO: Fix all magic numbers here.
+/// </summary>
 void GyroscopeUpdate()
 {
     IMU.readGyro();
@@ -499,10 +522,28 @@ void GyroscopeUpdate()
     uint16_t m = micros();
     uint16_t dt = m - gyroLastUpdate;
     gyroLastUpdate = m;
+
+    // Multiply dt by turnRate in order to get an estimation of how
+    // much the robot has turned since the last update.
+    // (angular change = angular velocity * time)
     int32_t d = (int32_t)turnRate * dt;
+
+    // The units of d are gyro digits times microseconds. We need
+    // to convert those to the units of turnAngle, where 2^29 units
+    // represents 45 degrees. The conversion from gyro digits to
+    // degrees per second (dps) is determined by the sensitivity of
+    // the gyro: 0.07 degrees per second per digit.
+    //
+    // (0.07 dps/digit) * (1/1000000 s/us) * (2^29/45 unit/degree)
+    // = 14680064/17578125 unit/(digit*us)
     turnAngle += (int64_t)d * 14680064 / 17578125;
 }
 
+/// <summary>
+/// Debug logging that prints text to the serial monitor if the robot is in DEBUG mode
+/// </summary>
+/// <param name="text"></param>
+/// <param name="newLine"></param>
 void DebugLog(String text, bool newLine = true)
 {
     if (DEBUG_MODE) {

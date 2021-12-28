@@ -1,12 +1,13 @@
 TODO list for this project:
+(X) = Handled
 
-* Document all functions & important variables
+* Document all functions & important variables (X)
 * Replace the old turn function with a better one that handles multiple directions of turning (X)
-* Fix public variables to be uppercase first letters
-* Fix data types
+* Fix public variables to be uppercase first letters (X)
+* Fix data types (X)
 * Remove stackoverflow in drivecycle (X)
 * Test the new turn function to make sure it works when implemented
 * Compile the final code in Arduino's IDE
 * Merge repository branch 'optimization' with the master branch
-
-* more...
+* Document all the magic numbers in the code (X)
+* Fix the name 'SensorStateCheck' for the bool that was previously 'findIR'
