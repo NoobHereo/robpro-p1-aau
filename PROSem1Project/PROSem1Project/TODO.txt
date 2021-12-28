@@ -6,8 +6,54 @@ TODO list for this project:
 * Fix public variables to be uppercase first letters (X)
 * Fix data types (X)
 * Remove stackoverflow in drivecycle (X)
+* Document all the magic numbers in the code (X)
+
+* Fix the name 'SensorStateCheck' for the bool that was previously 'findIR'
 * Test the new turn function to make sure it works when implemented
 * Compile the final code in Arduino's IDE
 * Merge repository branch 'optimization' with the master branch
-* Document all the magic numbers in the code (X)
-* Fix the name 'SensorStateCheck' for the bool that was previously 'findIR'
+
+
+
+
+.
+v
+
+
+.
+v
+
+
+.
+v
+
+
+.
+
+
+.
+
+         .--------._
+         (`--'       `-.
+          `.______      `.
+       ___________`__     \
+    ,-'           `-.\     |
+   //                \|    |\
+  (`  .'~~~~~---\     \'   | |
+   `-'           )     \   | |
+      ,---------' - -.  `  . '
+    ,'             `%`\`     |
+   /                      \  |
+  /     \-----.         \    `
+ /|  ,_/      '-._            |
+(-'  /           /            `     
+,`--<           |        \     \
+\ |  \         /%%             `\
+ |/   \____---'--`%        \     \
+ |    '           `               \
+ |
+  `--.__
+        `---._______
+                    `.
+                      \
+got em lmao
