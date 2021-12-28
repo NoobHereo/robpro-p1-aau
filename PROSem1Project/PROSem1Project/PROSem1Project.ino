@@ -15,7 +15,7 @@ Zumo32U4ButtonA buttonA;
 Zumo32U4IMU imu;
 
 //Booleans that help the robot know how far in the process it is
-bool rotatCheck, findLine, findIR, turned, canDetected, smallCanDetected, largeCanDetected, returnedHome, almostHome = false;
+bool rotatCheck, findLine, findIR, turnedDone, canDetected, smallCanDetected, largeCanDetected, returnedHome, almostHome = false;
 
 //////////////////////// SENSORS ////////////////////////
 #define NUM_SENSORS 5 //Number of activated sensors
@@ -102,7 +102,8 @@ void returnHome()
             motors.setSpeeds(-100, -100);
             delay(200);
             readSensors(sensorState);
-            while (!sensorState.left && !sensorState.right) {
+            while (!sensorState.left && !sensorState.right) 
+            {
                 readSensors(sensorState);
                 motors.setSpeeds(-100, -100);
                 delay(50);
@@ -129,14 +130,17 @@ void returnHome()
 
             //forward until line is detected
             readSensors(sensorState);
-            while (!sensorState.left && !sensorState.right) {
+            while (!sensorState.left && !sensorState.right) 
+            {
                 readSensors(sensorState);
                 motors.setSpeeds(75, 75);
-                if (!sensorState.left && sensorState.right) {
+                if (!sensorState.left && sensorState.right) 
+                {
                     motors.setSpeeds(75, 0);
                     delay(100);
                 }
-                else if (sensorState.left && !sensorState.right) {
+                else if (sensorState.left && !sensorState.right) 
+                {
                     motors.setSpeeds(0, 75);
                     delay(100);
                 }
@@ -150,14 +154,17 @@ void returnHome()
 
             readSensors(sensorState);
             motors.setSpeeds(75, 75);
-            while (!sensorState.left && !sensorState.right) {
+            while (!sensorState.left && !sensorState.right) 
+            {
                 readSensors(sensorState);
                 motors.setSpeeds(75, 75);
-                if (!sensorState.left && sensorState.right) {
+                if (!sensorState.left && sensorState.right) 
+                {
                     motors.setSpeeds(75, 0);
                     delay(50);
                 }
-                else if (sensorState.left && !sensorState.right) {
+                else if (sensorState.left && !sensorState.right) 
+                {
                     motors.setSpeeds(0, 75);
                     delay(50);
                 }
@@ -241,7 +248,8 @@ void smallCan() {
 }
 
 //Reuseable function for driving distances in cm
-void moveForward(int speeds, int dist) {                //Functions for moving directions, expecting three values. One for speed and one for time
+void moveForward(int speeds, int dist) 
+{                //Functions for moving directions, expecting three values. One for speed and one for time
     while (drivenDist < dist) {              //while desired distance travelled is greater than the actually travelled distance
         float countsL = encoders.getCountsLeft();               //Retrieve motorcounts
         double movementIncm = (countsL / 900) * (PI * 4) - 1.5; //Convert motorcounts to CM            
@@ -256,7 +264,8 @@ void moveForward(int speeds, int dist) {                //Functions for moving d
 //Funtion for making a 90 degree turn to the right
 void turn90R()
 {
-    while (!rotatCheck) {
+    while (!rotatCheck) 
+    {
         turnSensorUpdate();
         turnAngleDegrees = ((((int32_t)turnAngle >> 16) * 360) >> 16);
         lcd.gotoXY(0, 0);
@@ -280,7 +289,8 @@ void turn90R()
 //Function for making a 90 degree turn to the left.
 void turn90L()
 {
-    while (!rotatCheck) {
+    while (!rotatCheck) 
+    {
         turnSensorUpdate();
         turnAngleDegrees = ((((int32_t)turnAngle >> 16) * 360) >> 16);
         lcd.gotoXY(0, 0);
@@ -302,29 +312,35 @@ void turn90L()
 }
 
 //Initial function that finds the IR sensor
-void findLineAndSensor() {
-    while (!findLine) {
+void findLineAndSensor() 
+{
+    while (!findLine) 
+    {
         motors.setSpeeds(75, 75);
         readSensors(sensorState);
-        if (sensorState.left && sensorState.right) {
+        if (sensorState.left && sensorState.right) 
+        {
             delay(600);
             motors.setSpeeds(0, 0);
             findLine = true;
         }
-        else if (!sensorState.left && sensorState.right) {
+        else if (!sensorState.left && sensorState.right) 
+        {
             motors.setSpeeds(100, 0);
             delay(10);
         }
-        else if (sensorState.left && !sensorState.right) {
+        else if (sensorState.left && !sensorState.right) 
+        {
             motors.setSpeeds(0, 100);
             delay(10);
         }
     }
 
-    while (findLine && !findIR) { //
-        if (!turned) {
+    while (findLine && !findIR) 
+    {
+        if (!turnedDone) {
             turn90R();
-            turned = true;
+            turnedDone = true;
         }
 
         motors.setSpeeds(75, 100);
@@ -345,11 +361,15 @@ void findLineAndSensor() {
         }
     }
     motors.setSpeeds(0, 0);
-    turned = false;
+    turnedDone = false;
 }
 
-//Calibration function for white lines
-void calibrWht() { //A funtion that is called in the setup to help calibrate sensors for the conditions at hand
+/// <summary>
+/// Calibration function for white lines that is called in the setup to help 
+/// calibrate sensors for the conditions at hand
+/// </summary>
+void calibrWht()
+{
     buttonA.waitForPress();
     lcd.print("Prs A Cal");
     delay(250);
@@ -364,8 +384,13 @@ void calibrWht() { //A funtion that is called in the setup to help calibrate sen
     lcd.clear();
 }
 
-//Function that fills struct with values from sensorValues and compares to thresholds
-void readSensors(LineSensorsWhite& state) {  // Next line reads the sensor values and store them in the array lineSensorValues
+/// <summary>
+/// Fills struct with values from sensorValues and compares to thresholds
+/// Next line reads the sensor values and store them in the array lineSensorValues
+/// </summary>
+/// <param name="state"></param>
+void readSensors(LineSensorsWhite& state) 
+{
     lineSensors.read(sensorValues, useEmitters ? QTR_EMITTERS_ON : QTR_EMITTERS_OFF); //Retrieves data from sensors
     state = { false,false,false,false,false }; // state of the sensors is ALWAYS set to negative in the structure, so that the if statements below only change the boolean to true when the conditions are met
     if (sensorValues[0] < threshold) {
