@@ -10,6 +10,8 @@
 
 #define NUM_SENSORS 5 //Number of activated sensors
 #define SERIAL_FREQUENCY 9600
+#define DEBUG_MODE false
+#define MOTOR_SPEED 100
 
 Zumo32U4Motors Motors;
 Zumo32U4LCD LCD;
@@ -18,12 +20,12 @@ Zumo32U4ButtonA ButtonA;
 Zumo32U4IMU IMU;
 
 //Booleans that help the robot know how far in the process it is
-bool rotatCheck, findLine, findIR;
+bool GoalAngleReached, LineFound, findIR;
 
 bool turnedDone = false; 
 bool CanDetected = false; 
-bool smallCanDetected = false; 
-bool largeCanDetected = false; 
+bool SmallCanDetected = false; 
+bool LargeCanDetected = false; 
 bool ReturnedHome = false;
 
 Zumo32U4ProximitySensors ProximitySensors;
@@ -31,7 +33,10 @@ Zumo32U4LineSensors LineSensors;
 uint16_t SensorValues[NUM_SENSORS]; //Some array that contains the raw read values from the sensors between 0-2000
 bool UseEmitters = true;
 
-struct LineSensorsWhite //Datatype that stores the boolean values for the sensorStates
+/// <summary>
+/// Datatype that stores the boolean values for the sensorStates
+/// </summary>
+struct LineSensorsWhite
 {
     bool Left;
     bool LeftCenter;
@@ -40,51 +45,48 @@ struct LineSensorsWhite //Datatype that stores the boolean values for the sensor
     bool Right;
 };
 
-////////////////////////////////////////////////////////////
 
 //Storage values for linesensor thresholds and for distance measurement
-int DrivenDistance, threshold1, threshold2, threshold3;
+int DrivenDistance;
 
-// threshold:  White threshold, white return values lower than this
+// threshold1: White threshold, white return values lower than this
 // threshold2: white treshold for center 2 sensors
 // threshold3: White threshold for center sensor
+int threshold1, threshold2, threshold3;
 
-////////////////Gyro setup/////////////////////
 int turnAngleDegrees, flippedturnAngleDegrees;
 uint32_t turnAngle = 0;
 int16_t turnRate, gyroOffset;
 uint16_t gyroLastUpdate = 0;
 
-LineSensorsWhite sensorState = { false,false,false,false,false };
+LineSensorsWhite SensorStates = { false,false,false,false,false };
 uint16_t brightnessLevels[4] = { 1,2,3,4 };
 
 // the setup function runs once when you press reset or power the board
 void setup() {
-    configureComponents();
+    ConfigureComponents();
     delay(250);
 }
 
 // the loop function runs over and over again until power down or reset
 void loop() {
 
-    turnSensorUpdate();
+    GyroscopeUpdate();
     turnAngleDegrees = ((((int32_t)turnAngle >> 16) * 360) >> 16); //Updates turnAngleDegrees
 
-      //Drive Forward and detect line, follow line and stop on sensor
-    findLineAndSensor();
+    //Drive Forward and detect line, follow line and stop on sensor
+    FindLine();
 
     //standby and detect can types
     DetectCan();
 
     delay(20);
-    returnHome();
+    ReturnToHome();
 }
 
-/////////////////////// FUNCTIONS ///////////////////////
-
-void configureComponents()
+void ConfigureComponents()
 {
-    Serial.begin(SERIAL_FREQUENCY);
+    Serial.begin(SERIAL_FREQUENCY); // This is for debugging
     ProximitySensors.initThreeSensors(); //Sets up proximity sensors
     ProximitySensors.setBrightnessLevels(brightnessLevels, 4);  //Extends measurement levels for proximity sensors to increase overall accuracy
 
@@ -95,32 +97,32 @@ void configureComponents()
 
     LineSensors.initFiveSensors(); // Initializes the five line sensors
     CalibrateLineSensors();
-    Serial.println("Press A to start");
+    DebugLog("Press A to start");
     ButtonA.waitForPress();
 }
 
-void returnHome()
+void ReturnToHome()
 {
     while (!ReturnedHome)
     {
-        if (smallCanDetected)
+        if (SmallCanDetected)
         {
-            Motors.setSpeeds(-100, -100);
+            Motors.setSpeeds(-MOTOR_SPEED, -MOTOR_SPEED);
             delay(200);
-            readSensors(sensorState);
-            while (!sensorState.Left && !sensorState.Right) 
+            readSensors(SensorStates);
+            while (!SensorStates.Left && !SensorStates.Right) 
             {
-                readSensors(sensorState);
-                Motors.setSpeeds(-100, -100);
+                readSensors(SensorStates);
+                Motors.setSpeeds(-MOTOR_SPEED, -MOTOR_SPEED);
                 delay(50);
             }
             Motors.setSpeeds(0, 0);
             ReturnedHome = true;
         }
-        else if (largeCanDetected)
+        else if (LargeCanDetected)
         {
             //Back up off of sensor to stop conveyor
-            Motors.setSpeeds(-200, -200);
+            Motors.setSpeeds(-MOTOR_SPEED * 2, -MOTOR_SPEED * 2);
             delay(100);
             Motors.setSpeeds(0, 0);
             delay(200);
@@ -130,48 +132,48 @@ void returnHome()
             //Move forward for x cm
             Encoders.getCountsAndResetLeft();
             delay(50);
-            MoveForward(100, 30);
+            MoveForward(MOTOR_SPEED, MOTOR_SPEED * 0.3);
             //turn 90 degrees left
             turn90L();
 
             //forward until line is detected
-            readSensors(sensorState);
-            while (!sensorState.Left && !sensorState.Right) 
+            readSensors(SensorStates);
+            while (!SensorStates.Left && !SensorStates.Right) 
             {
-                readSensors(sensorState);
-                Motors.setSpeeds(75, 75);
-                if (!sensorState.Left && sensorState.Right) 
+                readSensors(SensorStates);
+                Motors.setSpeeds(MOTOR_SPEED * 0.75, MOTOR_SPEED * 0.75);
+                if (!SensorStates.Left && SensorStates.Right) 
                 {
-                    Motors.setSpeeds(75, 0);
+                    Motors.setSpeeds(MOTOR_SPEED * 0.75, 0);
                     delay(100);
                 }
-                else if (sensorState.Left && !sensorState.Right) 
+                else if (SensorStates.Left && !SensorStates.Right) 
                 {
-                    Motors.setSpeeds(0, 75);
+                    Motors.setSpeeds(0, MOTOR_SPEED * 0.75);
                     delay(100);
                 }
             }
-            Motors.setSpeeds(75, 75);
+            Motors.setSpeeds(MOTOR_SPEED * 0.75, MOTOR_SPEED * 0.75);
             delay(600);
             Motors.setSpeeds(0, 0);
             delay(200);
             turn90L();
             delay(200);
 
-            readSensors(sensorState);
-            Motors.setSpeeds(75, 75);
-            while (!sensorState.Left && !sensorState.Right) 
+            readSensors(SensorStates);
+            Motors.setSpeeds(MOTOR_SPEED * 0.75, MOTOR_SPEED * 0.75);
+            while (!SensorStates.Left && !SensorStates.Right)
             {
-                readSensors(sensorState);
-                Motors.setSpeeds(75, 75);
-                if (!sensorState.Left && sensorState.Right) 
+                readSensors(SensorStates);
+                Motors.setSpeeds(MOTOR_SPEED * 0.75, MOTOR_SPEED * 0.75);
+                if (!SensorStates.Left && SensorStates.Right) 
                 {
-                    Motors.setSpeeds(75, 0);
+                    Motors.setSpeeds(MOTOR_SPEED * 0.75, 0);
                     delay(50);
                 }
-                else if (sensorState.Left && !sensorState.Right) 
+                else if (SensorStates.Left && !SensorStates.Right) 
                 {
-                    Motors.setSpeeds(0, 75);
+                    Motors.setSpeeds(0, MOTOR_SPEED * 0.75);
                     delay(50);
                 }
             }
@@ -181,8 +183,8 @@ void returnHome()
         ReturnedHome = true;
     }
     CanDetected = false;
-    largeCanDetected = false;
-    smallCanDetected = false;
+    LargeCanDetected = false;
+    SmallCanDetected = false;
     ReturnedHome = false;
 }
 
@@ -197,23 +199,23 @@ void DetectCan()
 
         if (center_left_sensor >= 4 && center_right_sensor >= 4)
         {
-            largeCan();
-            largeCanDetected = true;
+            HandleLargeCan();
+            LargeCanDetected = true;
         }
         else if (center_left_sensor <= 3 && center_right_sensor <= 3)
         {
-            smallCan();
-            smallCanDetected = true;
+            HandleSmallCan();
+            SmallCanDetected = true;
         }
         CanDetected = true;
     }
 }
 
 //Function for pushing large can into bin. (Goes around the belt and pushes)
-void largeCan()
+void HandleLargeCan()
 {
     //Back up off of sensor to stop conveyor
-    Motors.setSpeeds(-200, -200);
+    Motors.setSpeeds(-MOTOR_SPEED * 2, -MOTOR_SPEED * 2);
     delay(100);
     Motors.setSpeeds(0, 0);
     delay(200);
@@ -230,23 +232,24 @@ void largeCan()
     //Turn 90 degrees left move 
     turn90L();
     //forward until line is detected
-    readSensors(sensorState);
-    while (!sensorState.Left && !sensorState.Right) {
-        readSensors(sensorState);
-        Motors.setSpeeds(100, 100);
+    readSensors(SensorStates);
+    while (!SensorStates.Left && !SensorStates.Right) {
+        readSensors(SensorStates);
+        Motors.setSpeeds(MOTOR_SPEED, MOTOR_SPEED);
         delay(50);
     }
     Motors.setSpeeds(0, 0);
 }
 
 //Pushing function for small can (Push forward)  
-void smallCan() {
-    Motors.setSpeeds(100, 100);
+void HandleSmallCan() {
+    Motors.setSpeeds(MOTOR_SPEED, MOTOR_SPEED);
     delay(200);
-    readSensors(sensorState);
-    while (!sensorState.Left && !sensorState.Right) {
-        readSensors(sensorState);
-        Motors.setSpeeds(100, 100);
+    readSensors(SensorStates);
+    while (!SensorStates.Left && !SensorStates.Right) 
+    {
+        readSensors(SensorStates);
+        Motors.setSpeeds(MOTOR_SPEED, MOTOR_SPEED);
         delay(50);
     }
     Motors.setSpeeds(0, 0);
@@ -277,9 +280,9 @@ void MoveForward(int speed, int dist)
 //Funtion for making a 90 degree turn to the right
 void Turn90Right()
 {
-    while (!rotatCheck) 
+    while (!GoalAngleReached) 
     {
-        turnSensorUpdate();
+        GyroscopeUpdate();
         turnAngleDegrees = ((((int32_t)turnAngle >> 16) * 360) >> 16);
         LCD.gotoXY(0, 0);
         LCD.print((((int32_t)turnAngle >> 16) * 360) >> 16);
@@ -288,23 +291,23 @@ void Turn90Right()
         if (flippedturnAngleDegrees >= 90 && 91 >= flippedturnAngleDegrees)
         {
             Motors.setSpeeds(0, 0);
-            rotatCheck = true;
+            GoalAngleReached = true;
         }
         else
         {
-            Motors.setSpeeds(100, -120);
+            Motors.setSpeeds(MOTOR_SPEED, -MOTOR_SPEED * 1.2);
         }
     }
     GyroscopeReset();
-    rotatCheck = false;
+    GoalAngleReached = false;
 }
 
 //Function for making a 90 degree turn to the left.
 void turn90L()
 {
-    while (!rotatCheck) 
+    while (!GoalAngleReached) 
     {
-        turnSensorUpdate();
+        GyroscopeUpdate();
         turnAngleDegrees = ((((int32_t)turnAngle >> 16) * 360) >> 16);
         LCD.gotoXY(0, 0);
         LCD.print((((int32_t)turnAngle >> 16) * 360) >> 16);
@@ -313,64 +316,66 @@ void turn90L()
         if (turnAngleDegrees >= 90 && 91 >= turnAngleDegrees)
         {
             Motors.setSpeeds(0, 0);
-            rotatCheck = true;
+            GoalAngleReached = true;
         }
         else
         {
-            Motors.setSpeeds(-120, 100);
+            Motors.setSpeeds(-MOTOR_SPEED * 1.2, MOTOR_SPEED);
         }
     }
     GyroscopeReset();
-    rotatCheck = false;
+    GoalAngleReached = false;
 }
 
-
-//Initial function that finds the IR sensor
-void findLineAndSensor() 
+/// <summary>
+/// Drives the robot forward until a white line is detected. This is used for the initial
+/// start and preperation stage for the robot.
+/// </summary>
+void FindLine() 
 {
-    while (!findLine) 
+    while (!LineFound) 
     {
-        Motors.setSpeeds(75, 75);
-        readSensors(sensorState);
-        if (sensorState.Left && sensorState.Right) 
+        Motors.setSpeeds(MOTOR_SPEED * 0.75, MOTOR_SPEED * 0.75);
+        readSensors(SensorStates);
+        if (SensorStates.Left && SensorStates.Right) 
         {
             delay(600);
             Motors.setSpeeds(0, 0);
-            findLine = true;
+            LineFound = true;
         }
-        else if (!sensorState.Left && sensorState.Right) 
+        else if (!SensorStates.Left && SensorStates.Right) 
         {
-            Motors.setSpeeds(100, 0);
+            Motors.setSpeeds(MOTOR_SPEED, 0);
             delay(10);
         }
-        else if (sensorState.Left && !sensorState.Right) 
+        else if (SensorStates.Left && !SensorStates.Right) 
         {
-            Motors.setSpeeds(0, 100);
+            Motors.setSpeeds(0, MOTOR_SPEED);
             delay(10);
         }
     }
 
-    while (findLine && !findIR) 
+    while (LineFound && !findIR) 
     {
         if (!turnedDone) {
             Turn90Right();
             turnedDone = true;
         }
 
-        Motors.setSpeeds(75, 100);
-        readSensors(sensorState);
+        Motors.setSpeeds(MOTOR_SPEED * 0.75, MOTOR_SPEED);
+        readSensors(SensorStates);
 
-        if (sensorState.Left && sensorState.Right) {
+        if (SensorStates.Left && SensorStates.Right) {
             delay(200);
             Motors.setSpeeds(0, 0);
             findIR = true;
         }
-        else if (!sensorState.Left && sensorState.Right) {
-            Motors.setSpeeds(100, 0);
+        else if (!SensorStates.Left && SensorStates.Right) {
+            Motors.setSpeeds(MOTOR_SPEED, 0);
             delay(100);
         }
-        else if (sensorState.Left && !sensorState.Right) {
-            Motors.setSpeeds(0, 100);
+        else if (SensorStates.Left && !SensorStates.Right) {
+            Motors.setSpeeds(0, MOTOR_SPEED);
             delay(100);
         }
     }
@@ -388,7 +393,7 @@ void CalibrateLineSensors()
     LCD.print("Prs A Cal");
     delay(250);
     ButtonA.waitForPress();
-    readSensors(sensorState);
+    readSensors(SensorStates);
     threshold1 = ((SensorValues[0] + SensorValues[4]) / 2 + 20); //takes the mean value of far left and right sensors and adds some margin to create a threshold
     threshold2 = ((SensorValues[1] + SensorValues[3]) / 2 + 20);
     threshold3 = (SensorValues[2] + 20);
@@ -467,7 +472,7 @@ void GyroscopeReset()
     turnAngle = 0;
 }
 
-void turnSensorUpdate()
+void GyroscopeUpdate()
 {
     IMU.readGyro();
     turnRate = IMU.g.z - gyroOffset;
@@ -476,5 +481,12 @@ void turnSensorUpdate()
     gyroLastUpdate = m;
     int32_t d = (int32_t)turnRate * dt;
     turnAngle += (int64_t)d * 14680064 / 17578125;
+}
+
+void DebugLog(String text, bool newLine = true)
+{
+    if (DEBUG_MODE) {
+        Serial.println(text);
+    }
 }
 
