@@ -15,37 +15,44 @@ Zumo32U4ButtonA buttonA;
 Zumo32U4IMU imu;
 
 //Booleans that help the robot know how far in the process it is
-bool rotatCheck, findLine, findIR, turnedDone, canDetected, smallCanDetected, largeCanDetected, returnedHome, almostHome = false;
+bool rotatCheck, findLine, findIR;
+
+bool turnedDone = false; 
+bool canDetected = false; 
+bool smallCanDetected = false; 
+bool largeCanDetected = false; 
+bool returnedHome = false;
+bool almostHome = false;
 
 //////////////////////// SENSORS ////////////////////////
 #define NUM_SENSORS 5 //Number of activated sensors
-Zumo32U4ProximitySensors proxSensors;
-Zumo32U4LineSensors lineSensors;
-uint16_t sensorValues[NUM_SENSORS]; //Some array that contains the raw read values from the sensors between 0-2000
-bool useEmitters = true;
+#define SERIAL_FREQUENCY 9600
+Zumo32U4ProximitySensors ProximitySensors;
+Zumo32U4LineSensors LineSensors;
+uint16_t SensorValues[NUM_SENSORS]; //Some array that contains the raw read values from the sensors between 0-2000
+bool UseEmitters = true;
 
 struct LineSensorsWhite //Datatype that stores the boolean values for the sensorStates
 {
-    bool left;
-    bool leftCenter;
+    bool Left;
+    bool LeftCenter;
     bool Center;
-    bool rightCenter;
-    bool right;
+    bool RightCenter;
+    bool Right;
 };
 
 ////////////////////////////////////////////////////////////
 
 //Storage values for linesensor thresholds and for distance measurement
-int drivenDist, threshold, threshold2, threshold3;
+int DrivenDistance, threshold1, threshold2, threshold3;
 
-// threshold: White threshold, white return values lower than this
+// threshold:  White threshold, white return values lower than this
 // threshold2: white treshold for center 2 sensors
 // threshold3: White threshold for center sensor
 
 ////////////////Gyro setup/////////////////////
 int turnAngleDegrees, flippedturnAngleDegrees;
 uint32_t turnAngle = 0;
-int turnAngle2 = turnAngle;
 int16_t turnRate, gyroOffset;
 uint16_t gyroLastUpdate = 0;
 
@@ -78,17 +85,17 @@ void loop() {
 
 void configureComponents()
 {
-    Serial.begin(9600);
-    proxSensors.initThreeSensors(); //Sets up proximity sensors
-    proxSensors.setBrightnessLevels(brightnessLevels, 4);  //Extends measurement levels for proximity sensors to increase overall accuracy
+    Serial.begin(SERIAL_FREQUENCY);
+    ProximitySensors.initThreeSensors(); //Sets up proximity sensors
+    ProximitySensors.setBrightnessLevels(brightnessLevels, 4);  //Extends measurement levels for proximity sensors to increase overall accuracy
 
-    turnSensorSetup(); //Sets up turning sensors
+    GyroscopeSetup(); // Sets up the IMU gyroscope
     delay(500);
-    turnSensorReset();
+    GyroscopeReset(); // Resets the IMU gyroscope to prepare for the drive
     lcd.clear();
 
-    lineSensors.initFiveSensors(); // Initializes five sensors
-    calibrWht();
+    LineSensors.initFiveSensors(); // Initializes the five line sensors
+    CalibrateLineSensors();
     Serial.println("Press A to start");
     buttonA.waitForPress();
 }
@@ -102,7 +109,7 @@ void returnHome()
             motors.setSpeeds(-100, -100);
             delay(200);
             readSensors(sensorState);
-            while (!sensorState.left && !sensorState.right) 
+            while (!sensorState.Left && !sensorState.Right) 
             {
                 readSensors(sensorState);
                 motors.setSpeeds(-100, -100);
@@ -124,22 +131,22 @@ void returnHome()
             //Move forward for x cm
             encoders.getCountsAndResetLeft();
             delay(50);
-            moveForward(100, 30);
+            MoveForward(100, 30);
             //turn 90 degrees left
             turn90L();
 
             //forward until line is detected
             readSensors(sensorState);
-            while (!sensorState.left && !sensorState.right) 
+            while (!sensorState.Left && !sensorState.Right) 
             {
                 readSensors(sensorState);
                 motors.setSpeeds(75, 75);
-                if (!sensorState.left && sensorState.right) 
+                if (!sensorState.Left && sensorState.Right) 
                 {
                     motors.setSpeeds(75, 0);
                     delay(100);
                 }
-                else if (sensorState.left && !sensorState.right) 
+                else if (sensorState.Left && !sensorState.Right) 
                 {
                     motors.setSpeeds(0, 75);
                     delay(100);
@@ -154,16 +161,16 @@ void returnHome()
 
             readSensors(sensorState);
             motors.setSpeeds(75, 75);
-            while (!sensorState.left && !sensorState.right) 
+            while (!sensorState.Left && !sensorState.Right) 
             {
                 readSensors(sensorState);
                 motors.setSpeeds(75, 75);
-                if (!sensorState.left && sensorState.right) 
+                if (!sensorState.Left && sensorState.Right) 
                 {
                     motors.setSpeeds(75, 0);
                     delay(50);
                 }
-                else if (sensorState.left && !sensorState.right) 
+                else if (sensorState.Left && !sensorState.Right) 
                 {
                     motors.setSpeeds(0, 75);
                     delay(50);
@@ -186,11 +193,11 @@ void detectCan()
 {
     while (!canDetected)
     {
-        proxSensors.read();
-        int center_left_sensor = proxSensors.countsFrontWithLeftLeds();
-        int center_right_sensor = proxSensors.countsFrontWithRightLeds();
+        ProximitySensors.read();
+        int center_left_sensor = ProximitySensors.countsFrontWithLeftLeds();
+        int center_right_sensor = ProximitySensors.countsFrontWithRightLeds();
 
-        if (center_left_sensor == 4 && center_right_sensor == 4)
+        if (center_left_sensor >= 4 && center_right_sensor >= 4)
         {
             largeCan();
             largeCanDetected = true;
@@ -214,19 +221,19 @@ void largeCan()
     delay(200);
 
     //Turn 90 degrees right
-    turn90R();
+    Turn90Right();
     encoders.getCountsAndResetLeft();
     //Move forward for x cm
-    moveForward(100, 20);
+    MoveForward(100, 20);
     //turn 90 degrees left
     turn90L();
     //move forward for x cm 
-    moveForward(100, 15);
+    MoveForward(100, 15);
     //Turn 90 degrees left move 
     turn90L();
     //forward until line is detected
     readSensors(sensorState);
-    while (!sensorState.left && !sensorState.right) {
+    while (!sensorState.Left && !sensorState.Right) {
         readSensors(sensorState);
         motors.setSpeeds(100, 100);
         delay(50);
@@ -239,7 +246,7 @@ void smallCan() {
     motors.setSpeeds(100, 100);
     delay(200);
     readSensors(sensorState);
-    while (!sensorState.left && !sensorState.right) {
+    while (!sensorState.Left && !sensorState.Right) {
         readSensors(sensorState);
         motors.setSpeeds(100, 100);
         delay(50);
@@ -247,22 +254,30 @@ void smallCan() {
     motors.setSpeeds(0, 0);
 }
 
-//Reuseable function for driving distances in cm
-void moveForward(int speeds, int dist) 
-{                //Functions for moving directions, expecting three values. One for speed and one for time
-    while (drivenDist < dist) {              //while desired distance travelled is greater than the actually travelled distance
-        float countsL = encoders.getCountsLeft();               //Retrieve motorcounts
-        double movementIncm = (countsL / 900) * (PI * 4) - 1.5; //Convert motorcounts to CM            
-        motors.setSpeeds(speeds, speeds);                        //Set positive speeds to go forward
-        drivenDist = movementIncm;
+/// <summary>
+/// Moves the robot in a fowarqd direction with a fixed angle that has been set during the turn.
+/// While a given distance is not yet reached based on the driven distance determined by movement increment
+/// the robot will drive in a forward direction until the given direction 'dist' has been reached. 
+/// After the distance has been reached it will reset the encoder count and driven distance for later use.
+/// </summary>
+/// <param name="speeds"></param>
+/// <param name="dist"></param>
+void MoveForward(int speed, int dist) 
+{               
+    while (DrivenDistance < dist) // While desired distance travelled is greater than the driven distance
+    {
+        float countsL = encoders.getCountsLeft(); // Retrieve motorcounts
+        double movementIncm = (countsL / 900) * (PI * 4) - 1.5; // Convert motorcounts to CM            
+        motors.setSpeeds(speed, speed);
+        DrivenDistance = movementIncm;
     }
-    motors.setSpeeds(0, 0);                                  //turn off motors
-    encoders.getCountsAndResetLeft();                       //Reset encodercount for future use
-    drivenDist = 0;
+    motors.setSpeeds(0, 0); // Stops the motors
+    encoders.getCountsAndResetLeft();
+    DrivenDistance = 0;
 }
 
 //Funtion for making a 90 degree turn to the right
-void turn90R()
+void Turn90Right()
 {
     while (!rotatCheck) 
     {
@@ -282,7 +297,7 @@ void turn90R()
             motors.setSpeeds(100, -120);
         }
     }
-    turnSensorReset();
+    GyroscopeReset();
     rotatCheck = false;
 }
 
@@ -307,9 +322,10 @@ void turn90L()
             motors.setSpeeds(-120, 100);
         }
     }
-    turnSensorReset();
+    GyroscopeReset();
     rotatCheck = false;
 }
+
 
 //Initial function that finds the IR sensor
 void findLineAndSensor() 
@@ -318,18 +334,18 @@ void findLineAndSensor()
     {
         motors.setSpeeds(75, 75);
         readSensors(sensorState);
-        if (sensorState.left && sensorState.right) 
+        if (sensorState.Left && sensorState.Right) 
         {
             delay(600);
             motors.setSpeeds(0, 0);
             findLine = true;
         }
-        else if (!sensorState.left && sensorState.right) 
+        else if (!sensorState.Left && sensorState.Right) 
         {
             motors.setSpeeds(100, 0);
             delay(10);
         }
-        else if (sensorState.left && !sensorState.right) 
+        else if (sensorState.Left && !sensorState.Right) 
         {
             motors.setSpeeds(0, 100);
             delay(10);
@@ -339,23 +355,23 @@ void findLineAndSensor()
     while (findLine && !findIR) 
     {
         if (!turnedDone) {
-            turn90R();
+            Turn90Right();
             turnedDone = true;
         }
 
         motors.setSpeeds(75, 100);
         readSensors(sensorState);
 
-        if (sensorState.left && sensorState.right) {
+        if (sensorState.Left && sensorState.Right) {
             delay(200);
             motors.setSpeeds(0, 0);
             findIR = true;
         }
-        else if (!sensorState.left && sensorState.right) {
+        else if (!sensorState.Left && sensorState.Right) {
             motors.setSpeeds(100, 0);
             delay(100);
         }
-        else if (sensorState.left && !sensorState.right) {
+        else if (sensorState.Left && !sensorState.Right) {
             motors.setSpeeds(0, 100);
             delay(100);
         }
@@ -365,21 +381,21 @@ void findLineAndSensor()
 }
 
 /// <summary>
-/// Calibration function for white lines that is called in the setup to help 
-/// calibrate sensors for the conditions at hand
+/// Calibrates the line sensors by reading average thresholds based on the surface
+/// the robot scans during calibration.
 /// </summary>
-void calibrWht()
+void CalibrateLineSensors()
 {
     buttonA.waitForPress();
     lcd.print("Prs A Cal");
     delay(250);
     buttonA.waitForPress();
     readSensors(sensorState);
-    threshold = ((sensorValues[0] + sensorValues[4]) / 2 + 20); //takes the mean value of far left and right sensors and adds some margin to create a threshold
-    threshold2 = ((sensorValues[1] + sensorValues[3]) / 2 + 20);
-    threshold3 = (sensorValues[2] + 20);
+    threshold1 = ((SensorValues[0] + SensorValues[4]) / 2 + 20); //takes the mean value of far left and right sensors and adds some margin to create a threshold
+    threshold2 = ((SensorValues[1] + SensorValues[3]) / 2 + 20);
+    threshold3 = (SensorValues[2] + 20);
     delay(250);
-    Serial.println(threshold); //prints threshold once at the beginning of the code
+    Serial.println(threshold1); //prints threshold once at the beginning of the code
     Serial.println(threshold2);
     lcd.clear();
 }
@@ -391,27 +407,27 @@ void calibrWht()
 /// <param name="state"></param>
 void readSensors(LineSensorsWhite& state) 
 {
-    lineSensors.read(sensorValues, useEmitters ? QTR_EMITTERS_ON : QTR_EMITTERS_OFF); //Retrieves data from sensors
+    LineSensors.read(SensorValues, UseEmitters ? QTR_EMITTERS_ON : QTR_EMITTERS_OFF); //Retrieves data from sensors
     state = { false,false,false,false,false }; // state of the sensors is ALWAYS set to negative in the structure, so that the if statements below only change the boolean to true when the conditions are met
-    if (sensorValues[0] < threshold) {
-        state.left = true;
+    if (SensorValues[0] < threshold1) {
+        state.Left = true;
     }
-    if (sensorValues[1] < threshold2) {
-        state.leftCenter = true;
+    if (SensorValues[1] < threshold2) {
+        state.LeftCenter = true;
     }
-    if (sensorValues[2] < threshold3) {
+    if (SensorValues[2] < threshold3) {
         state.Center = true;
     }
-    if (sensorValues[3] < threshold2) {
-        state.rightCenter = true;
+    if (SensorValues[3] < threshold2) {
+        state.RightCenter = true;
     }
-    if (sensorValues[4] < threshold) {
-        state.right = true;
+    if (SensorValues[4] < threshold1) {
+        state.Right = true;
     }
 }
 
 //Code for using gyro
-void turnSensorSetup()
+void GyroscopeSetup()
 {
     Wire.begin();
     imu.init();
@@ -447,7 +463,7 @@ void turnSensorSetup()
 }
 
 
-void turnSensorReset()
+void GyroscopeReset()
 {
     gyroLastUpdate = micros();
     turnAngle = 0;
