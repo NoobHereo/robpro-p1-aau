@@ -60,7 +60,7 @@ int16_t turnRate, gyroOffset;
 uint16_t gyroLastUpdate = 0;
 
 LineSensorsWhite SensorStates = { false,false,false,false,false };
-uint16_t brightnessLevels[4] = { 1,2,3,4 };
+uint16_t BrightnessLevels[4] = { 1,2,3,4 };
 
 // the setup function runs once when you press reset or power the board
 void setup() {
@@ -88,7 +88,7 @@ void ConfigureComponents()
 {
     Serial.begin(SERIAL_FREQUENCY); // This is for debugging
     ProximitySensors.initThreeSensors(); //Sets up proximity sensors
-    ProximitySensors.setBrightnessLevels(brightnessLevels, 4);  //Extends measurement levels for proximity sensors to increase overall accuracy
+    ProximitySensors.setBrightnessLevels(BrightnessLevels, 4);  //Extends measurement levels for proximity sensors to increase overall accuracy
 
     GyroscopeSetup(); // Sets up the IMU gyroscope
     delay(500);
@@ -109,10 +109,10 @@ void ReturnToHome()
         {
             Motors.setSpeeds(-MOTOR_SPEED, -MOTOR_SPEED);
             delay(200);
-            readSensors(SensorStates);
+            HandleSensorData(SensorStates);
             while (!SensorStates.Left && !SensorStates.Right) 
             {
-                readSensors(SensorStates);
+                HandleSensorData(SensorStates);
                 Motors.setSpeeds(-MOTOR_SPEED, -MOTOR_SPEED);
                 delay(50);
             }
@@ -128,19 +128,22 @@ void ReturnToHome()
             delay(200);
 
             //Turn 90 degrees left
-            turn90L();
+            Turn(90, 'L');
+
             //Move forward for x cm
             Encoders.getCountsAndResetLeft();
+
             delay(50);
             MoveForward(MOTOR_SPEED, MOTOR_SPEED * 0.3);
+
             //turn 90 degrees left
-            turn90L();
+            Turn(90, 'L');
 
             //forward until line is detected
-            readSensors(SensorStates);
+            HandleSensorData(SensorStates);
             while (!SensorStates.Left && !SensorStates.Right) 
             {
-                readSensors(SensorStates);
+                HandleSensorData(SensorStates);
                 Motors.setSpeeds(MOTOR_SPEED * 0.75, MOTOR_SPEED * 0.75);
                 if (!SensorStates.Left && SensorStates.Right) 
                 {
@@ -157,14 +160,14 @@ void ReturnToHome()
             delay(600);
             Motors.setSpeeds(0, 0);
             delay(200);
-            turn90L();
+            Turn(90, 'L');
             delay(200);
 
-            readSensors(SensorStates);
+            HandleSensorData(SensorStates);
             Motors.setSpeeds(MOTOR_SPEED * 0.75, MOTOR_SPEED * 0.75);
             while (!SensorStates.Left && !SensorStates.Right)
             {
-                readSensors(SensorStates);
+                HandleSensorData(SensorStates);
                 Motors.setSpeeds(MOTOR_SPEED * 0.75, MOTOR_SPEED * 0.75);
                 if (!SensorStates.Left && SensorStates.Right) 
                 {
@@ -221,20 +224,27 @@ void HandleLargeCan()
     delay(200);
 
     //Turn 90 degrees right
-    Turn90Right();
+    Turn(90, 'R');
     Encoders.getCountsAndResetLeft();
+
     //Move forward for x cm
     MoveForward(100, 20);
+
     //turn 90 degrees left
-    turn90L();
+    Turn(90, 'L');
+
     //move forward for x cm 
-    MoveForward(100, 15);
+    MoveForward(MOTOR_SPEED, MOTOR_SPEED * 0.15);
+
     //Turn 90 degrees left move 
-    turn90L();
+    Turn(90, 'L');
+
     //forward until line is detected
-    readSensors(SensorStates);
-    while (!SensorStates.Left && !SensorStates.Right) {
-        readSensors(SensorStates);
+    HandleSensorData(SensorStates);
+
+    while (!SensorStates.Left && !SensorStates.Right) 
+    {
+        HandleSensorData(SensorStates);
         Motors.setSpeeds(MOTOR_SPEED, MOTOR_SPEED);
         delay(50);
     }
@@ -245,10 +255,10 @@ void HandleLargeCan()
 void HandleSmallCan() {
     Motors.setSpeeds(MOTOR_SPEED, MOTOR_SPEED);
     delay(200);
-    readSensors(SensorStates);
+    HandleSensorData(SensorStates);
     while (!SensorStates.Left && !SensorStates.Right) 
     {
-        readSensors(SensorStates);
+        HandleSensorData(SensorStates);
         Motors.setSpeeds(MOTOR_SPEED, MOTOR_SPEED);
         delay(50);
     }
@@ -277,52 +287,62 @@ void MoveForward(int speed, int dist)
     DrivenDistance = 0;
 }
 
-//Funtion for making a 90 degree turn to the right
-void Turn90Right()
+/// <summary>
+/// Turns the robot to a decired angle in one of either directions, L: Left, R: Right.
+/// </summary>
+/// <param name="angle"></param>
+/// <param name="dir"></param>
+void Turn(int angle, char dir)
 {
-    while (!GoalAngleReached) 
+    switch (dir)
     {
-        GyroscopeUpdate();
-        turnAngleDegrees = ((((int32_t)turnAngle >> 16) * 360) >> 16);
-        LCD.gotoXY(0, 0);
-        LCD.print((((int32_t)turnAngle >> 16) * 360) >> 16);
-        LCD.print(F("   "));
-        flippedturnAngleDegrees = -turnAngleDegrees; //Because degrees are negative to the right, we have to flip the value to some positive integer
-        if (flippedturnAngleDegrees >= 90 && 91 >= flippedturnAngleDegrees)
-        {
-            Motors.setSpeeds(0, 0);
-            GoalAngleReached = true;
-        }
-        else
-        {
-            Motors.setSpeeds(MOTOR_SPEED, -MOTOR_SPEED * 1.2);
-        }
-    }
-    GyroscopeReset();
-    GoalAngleReached = false;
-}
+        case 'L':
+            while (!GoalAngleReached)
+            {
+                GyroscopeUpdate();     
+                turnAngleDegrees = ((((int32_t)turnAngle >> 16) * 360) >> 16);
+                LCD.gotoXY(0, 0);
+                LCD.print((((int32_t)turnAngle >> 16) * 360) >> 16);
+                LCD.print(F("   "));
 
-//Function for making a 90 degree turn to the left.
-void turn90L()
-{
-    while (!GoalAngleReached) 
-    {
-        GyroscopeUpdate();
-        turnAngleDegrees = ((((int32_t)turnAngle >> 16) * 360) >> 16);
-        LCD.gotoXY(0, 0);
-        LCD.print((((int32_t)turnAngle >> 16) * 360) >> 16);
-        LCD.print(F("   "));
+                if (turnAngleDegrees >= angle && (angle + 1) >= turnAngleDegrees)
+                {
+                    Motors.setSpeeds(0, 0);
+                    GoalAngleReached = true;
+                }
+                else
+                {
+                    Motors.setSpeeds(-MOTOR_SPEED * 1.2, MOTOR_SPEED);
+                }
+            }
+            break;
 
-        if (turnAngleDegrees >= 90 && 91 >= turnAngleDegrees)
-        {
-            Motors.setSpeeds(0, 0);
-            GoalAngleReached = true;
-        }
-        else
-        {
-            Motors.setSpeeds(-MOTOR_SPEED * 1.2, MOTOR_SPEED);
-        }
+        case 'R':
+            while (!GoalAngleReached)
+            {
+                GyroscopeUpdate();
+                turnAngleDegrees = ((((int32_t)turnAngle >> 16) * 360) >> 16);
+                LCD.gotoXY(0, 0);
+                LCD.print((((int32_t)turnAngle >> 16) * 360) >> 16);
+                LCD.print(F("   "));
+                flippedturnAngleDegrees = -turnAngleDegrees; //Because degrees are negative to the right, we have to flip the value to some positive integer
+                if (flippedturnAngleDegrees >= angle && (angle + 1) >= flippedturnAngleDegrees)
+                {
+                    Motors.setSpeeds(0, 0);
+                    GoalAngleReached = true;
+                }
+                else
+                {
+                    Motors.setSpeeds(MOTOR_SPEED, -MOTOR_SPEED * 1.2);
+                }
+            }
+            break;
+
+        default:
+            DebugLog("Unknown turn direction registered: " + (String)dir);
+            break;
     }
+
     GyroscopeReset();
     GoalAngleReached = false;
 }
@@ -336,7 +356,7 @@ void FindLine()
     while (!LineFound) 
     {
         Motors.setSpeeds(MOTOR_SPEED * 0.75, MOTOR_SPEED * 0.75);
-        readSensors(SensorStates);
+        HandleSensorData(SensorStates);
         if (SensorStates.Left && SensorStates.Right) 
         {
             delay(600);
@@ -358,12 +378,12 @@ void FindLine()
     while (LineFound && !findIR) 
     {
         if (!turnedDone) {
-            Turn90Right();
+            Turn(90, 'R');
             turnedDone = true;
         }
 
         Motors.setSpeeds(MOTOR_SPEED * 0.75, MOTOR_SPEED);
-        readSensors(SensorStates);
+        HandleSensorData(SensorStates);
 
         if (SensorStates.Left && SensorStates.Right) {
             delay(200);
@@ -393,7 +413,7 @@ void CalibrateLineSensors()
     LCD.print("Prs A Cal");
     delay(250);
     ButtonA.waitForPress();
-    readSensors(SensorStates);
+    HandleSensorData(SensorStates);
     threshold1 = ((SensorValues[0] + SensorValues[4]) / 2 + 20); //takes the mean value of far left and right sensors and adds some margin to create a threshold
     threshold2 = ((SensorValues[1] + SensorValues[3]) / 2 + 20);
     threshold3 = (SensorValues[2] + 20);
@@ -408,7 +428,7 @@ void CalibrateLineSensors()
 /// Next line reads the sensor values and store them in the array lineSensorValues
 /// </summary>
 /// <param name="state"></param>
-void readSensors(LineSensorsWhite& state) 
+void HandleSensorData(LineSensorsWhite& state) 
 {
     LineSensors.read(SensorValues, UseEmitters ? QTR_EMITTERS_ON : QTR_EMITTERS_OFF); //Retrieves data from sensors
     state = { false,false,false,false,false }; // state of the sensors is ALWAYS set to negative in the structure, so that the if statements below only change the boolean to true when the conditions are met
@@ -486,7 +506,7 @@ void GyroscopeUpdate()
 void DebugLog(String text, bool newLine = true)
 {
     if (DEBUG_MODE) {
-        Serial.println(text);
+        Serial.println("[DEBUG]" + text);
     }
 }
 

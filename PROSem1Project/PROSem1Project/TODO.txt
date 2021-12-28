@@ -1,0 +1,12 @@
+TODO list for this project:
+
+* Document all functions & important variables
+* Replace the old turn function with a better one that handles multiple directions of turning (X)
+* Fix public variables to be uppercase first letters
+* Fix data types
+* Remove stackoverflow in drivecycle (X)
+* Test the new turn function to make sure it works when implemented
+* Compile the final code in Arduino's IDE
+* Merge repository branch 'optimization' with the master branch
+
+* more...
