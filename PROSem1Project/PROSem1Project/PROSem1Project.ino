@@ -8,25 +8,24 @@
 #include <Wire.h>
 #include <Zumo32U4.h>
 
-Zumo32U4Motors motors;
-Zumo32U4LCD lcd;
-Zumo32U4Encoders encoders;
-Zumo32U4ButtonA buttonA;
-Zumo32U4IMU imu;
+#define NUM_SENSORS 5 //Number of activated sensors
+#define SERIAL_FREQUENCY 9600
+
+Zumo32U4Motors Motors;
+Zumo32U4LCD LCD;
+Zumo32U4Encoders Encoders;
+Zumo32U4ButtonA ButtonA;
+Zumo32U4IMU IMU;
 
 //Booleans that help the robot know how far in the process it is
 bool rotatCheck, findLine, findIR;
 
 bool turnedDone = false; 
-bool canDetected = false; 
+bool CanDetected = false; 
 bool smallCanDetected = false; 
 bool largeCanDetected = false; 
-bool returnedHome = false;
-bool almostHome = false;
+bool ReturnedHome = false;
 
-//////////////////////// SENSORS ////////////////////////
-#define NUM_SENSORS 5 //Number of activated sensors
-#define SERIAL_FREQUENCY 9600
 Zumo32U4ProximitySensors ProximitySensors;
 Zumo32U4LineSensors LineSensors;
 uint16_t SensorValues[NUM_SENSORS]; //Some array that contains the raw read values from the sensors between 0-2000
@@ -75,7 +74,7 @@ void loop() {
     findLineAndSensor();
 
     //standby and detect can types
-    detectCan();
+    DetectCan();
 
     delay(20);
     returnHome();
@@ -92,44 +91,44 @@ void configureComponents()
     GyroscopeSetup(); // Sets up the IMU gyroscope
     delay(500);
     GyroscopeReset(); // Resets the IMU gyroscope to prepare for the drive
-    lcd.clear();
+    LCD.clear();
 
     LineSensors.initFiveSensors(); // Initializes the five line sensors
     CalibrateLineSensors();
     Serial.println("Press A to start");
-    buttonA.waitForPress();
+    ButtonA.waitForPress();
 }
 
 void returnHome()
 {
-    while (!returnedHome)
+    while (!ReturnedHome)
     {
         if (smallCanDetected)
         {
-            motors.setSpeeds(-100, -100);
+            Motors.setSpeeds(-100, -100);
             delay(200);
             readSensors(sensorState);
             while (!sensorState.Left && !sensorState.Right) 
             {
                 readSensors(sensorState);
-                motors.setSpeeds(-100, -100);
+                Motors.setSpeeds(-100, -100);
                 delay(50);
             }
-            motors.setSpeeds(0, 0);
-            returnedHome = true;
+            Motors.setSpeeds(0, 0);
+            ReturnedHome = true;
         }
-        else if (largeCanDetected && !almostHome)
+        else if (largeCanDetected)
         {
             //Back up off of sensor to stop conveyor
-            motors.setSpeeds(-200, -200);
+            Motors.setSpeeds(-200, -200);
             delay(100);
-            motors.setSpeeds(0, 0);
+            Motors.setSpeeds(0, 0);
             delay(200);
 
             //Turn 90 degrees left
             turn90L();
             //Move forward for x cm
-            encoders.getCountsAndResetLeft();
+            Encoders.getCountsAndResetLeft();
             delay(50);
             MoveForward(100, 30);
             //turn 90 degrees left
@@ -140,58 +139,57 @@ void returnHome()
             while (!sensorState.Left && !sensorState.Right) 
             {
                 readSensors(sensorState);
-                motors.setSpeeds(75, 75);
+                Motors.setSpeeds(75, 75);
                 if (!sensorState.Left && sensorState.Right) 
                 {
-                    motors.setSpeeds(75, 0);
+                    Motors.setSpeeds(75, 0);
                     delay(100);
                 }
                 else if (sensorState.Left && !sensorState.Right) 
                 {
-                    motors.setSpeeds(0, 75);
+                    Motors.setSpeeds(0, 75);
                     delay(100);
                 }
             }
-            motors.setSpeeds(75, 75);
+            Motors.setSpeeds(75, 75);
             delay(600);
-            motors.setSpeeds(0, 0);
+            Motors.setSpeeds(0, 0);
             delay(200);
             turn90L();
             delay(200);
 
             readSensors(sensorState);
-            motors.setSpeeds(75, 75);
+            Motors.setSpeeds(75, 75);
             while (!sensorState.Left && !sensorState.Right) 
             {
                 readSensors(sensorState);
-                motors.setSpeeds(75, 75);
+                Motors.setSpeeds(75, 75);
                 if (!sensorState.Left && sensorState.Right) 
                 {
-                    motors.setSpeeds(75, 0);
+                    Motors.setSpeeds(75, 0);
                     delay(50);
                 }
                 else if (sensorState.Left && !sensorState.Right) 
                 {
-                    motors.setSpeeds(0, 75);
+                    Motors.setSpeeds(0, 75);
                     delay(50);
                 }
             }
             delay(100);
-            motors.setSpeeds(0, 0);
+            Motors.setSpeeds(0, 0);
         }
-        returnedHome = true;
+        ReturnedHome = true;
     }
-    canDetected = false;
+    CanDetected = false;
     largeCanDetected = false;
     smallCanDetected = false;
-    returnedHome = false;
-    almostHome = false;
+    ReturnedHome = false;
 }
 
 //Function for detecing can type and initializing can pushing sequences
-void detectCan()
+void DetectCan()
 {
-    while (!canDetected)
+    while (!CanDetected)
     {
         ProximitySensors.read();
         int center_left_sensor = ProximitySensors.countsFrontWithLeftLeds();
@@ -207,7 +205,7 @@ void detectCan()
             smallCan();
             smallCanDetected = true;
         }
-        canDetected = true;
+        CanDetected = true;
     }
 }
 
@@ -215,14 +213,14 @@ void detectCan()
 void largeCan()
 {
     //Back up off of sensor to stop conveyor
-    motors.setSpeeds(-200, -200);
+    Motors.setSpeeds(-200, -200);
     delay(100);
-    motors.setSpeeds(0, 0);
+    Motors.setSpeeds(0, 0);
     delay(200);
 
     //Turn 90 degrees right
     Turn90Right();
-    encoders.getCountsAndResetLeft();
+    Encoders.getCountsAndResetLeft();
     //Move forward for x cm
     MoveForward(100, 20);
     //turn 90 degrees left
@@ -235,23 +233,23 @@ void largeCan()
     readSensors(sensorState);
     while (!sensorState.Left && !sensorState.Right) {
         readSensors(sensorState);
-        motors.setSpeeds(100, 100);
+        Motors.setSpeeds(100, 100);
         delay(50);
     }
-    motors.setSpeeds(0, 0);
+    Motors.setSpeeds(0, 0);
 }
 
 //Pushing function for small can (Push forward)  
 void smallCan() {
-    motors.setSpeeds(100, 100);
+    Motors.setSpeeds(100, 100);
     delay(200);
     readSensors(sensorState);
     while (!sensorState.Left && !sensorState.Right) {
         readSensors(sensorState);
-        motors.setSpeeds(100, 100);
+        Motors.setSpeeds(100, 100);
         delay(50);
     }
-    motors.setSpeeds(0, 0);
+    Motors.setSpeeds(0, 0);
 }
 
 /// <summary>
@@ -266,13 +264,13 @@ void MoveForward(int speed, int dist)
 {               
     while (DrivenDistance < dist) // While desired distance travelled is greater than the driven distance
     {
-        float countsL = encoders.getCountsLeft(); // Retrieve motorcounts
+        float countsL = Encoders.getCountsLeft(); // Retrieve motorcounts
         double movementIncm = (countsL / 900) * (PI * 4) - 1.5; // Convert motorcounts to CM            
-        motors.setSpeeds(speed, speed);
+        Motors.setSpeeds(speed, speed);
         DrivenDistance = movementIncm;
     }
-    motors.setSpeeds(0, 0); // Stops the motors
-    encoders.getCountsAndResetLeft();
+    Motors.setSpeeds(0, 0); // Stops the motors
+    Encoders.getCountsAndResetLeft();
     DrivenDistance = 0;
 }
 
@@ -283,18 +281,18 @@ void Turn90Right()
     {
         turnSensorUpdate();
         turnAngleDegrees = ((((int32_t)turnAngle >> 16) * 360) >> 16);
-        lcd.gotoXY(0, 0);
-        lcd.print((((int32_t)turnAngle >> 16) * 360) >> 16);
-        lcd.print(F("   "));
+        LCD.gotoXY(0, 0);
+        LCD.print((((int32_t)turnAngle >> 16) * 360) >> 16);
+        LCD.print(F("   "));
         flippedturnAngleDegrees = -turnAngleDegrees; //Because degrees are negative to the right, we have to flip the value to some positive integer
         if (flippedturnAngleDegrees >= 90 && 91 >= flippedturnAngleDegrees)
         {
-            motors.setSpeeds(0, 0);
+            Motors.setSpeeds(0, 0);
             rotatCheck = true;
         }
         else
         {
-            motors.setSpeeds(100, -120);
+            Motors.setSpeeds(100, -120);
         }
     }
     GyroscopeReset();
@@ -308,18 +306,18 @@ void turn90L()
     {
         turnSensorUpdate();
         turnAngleDegrees = ((((int32_t)turnAngle >> 16) * 360) >> 16);
-        lcd.gotoXY(0, 0);
-        lcd.print((((int32_t)turnAngle >> 16) * 360) >> 16);
-        lcd.print(F("   "));
+        LCD.gotoXY(0, 0);
+        LCD.print((((int32_t)turnAngle >> 16) * 360) >> 16);
+        LCD.print(F("   "));
 
         if (turnAngleDegrees >= 90 && 91 >= turnAngleDegrees)
         {
-            motors.setSpeeds(0, 0);
+            Motors.setSpeeds(0, 0);
             rotatCheck = true;
         }
         else
         {
-            motors.setSpeeds(-120, 100);
+            Motors.setSpeeds(-120, 100);
         }
     }
     GyroscopeReset();
@@ -332,22 +330,22 @@ void findLineAndSensor()
 {
     while (!findLine) 
     {
-        motors.setSpeeds(75, 75);
+        Motors.setSpeeds(75, 75);
         readSensors(sensorState);
         if (sensorState.Left && sensorState.Right) 
         {
             delay(600);
-            motors.setSpeeds(0, 0);
+            Motors.setSpeeds(0, 0);
             findLine = true;
         }
         else if (!sensorState.Left && sensorState.Right) 
         {
-            motors.setSpeeds(100, 0);
+            Motors.setSpeeds(100, 0);
             delay(10);
         }
         else if (sensorState.Left && !sensorState.Right) 
         {
-            motors.setSpeeds(0, 100);
+            Motors.setSpeeds(0, 100);
             delay(10);
         }
     }
@@ -359,24 +357,24 @@ void findLineAndSensor()
             turnedDone = true;
         }
 
-        motors.setSpeeds(75, 100);
+        Motors.setSpeeds(75, 100);
         readSensors(sensorState);
 
         if (sensorState.Left && sensorState.Right) {
             delay(200);
-            motors.setSpeeds(0, 0);
+            Motors.setSpeeds(0, 0);
             findIR = true;
         }
         else if (!sensorState.Left && sensorState.Right) {
-            motors.setSpeeds(100, 0);
+            Motors.setSpeeds(100, 0);
             delay(100);
         }
         else if (sensorState.Left && !sensorState.Right) {
-            motors.setSpeeds(0, 100);
+            Motors.setSpeeds(0, 100);
             delay(100);
         }
     }
-    motors.setSpeeds(0, 0);
+    Motors.setSpeeds(0, 0);
     turnedDone = false;
 }
 
@@ -386,10 +384,10 @@ void findLineAndSensor()
 /// </summary>
 void CalibrateLineSensors()
 {
-    buttonA.waitForPress();
-    lcd.print("Prs A Cal");
+    ButtonA.waitForPress();
+    LCD.print("Prs A Cal");
     delay(250);
-    buttonA.waitForPress();
+    ButtonA.waitForPress();
     readSensors(sensorState);
     threshold1 = ((SensorValues[0] + SensorValues[4]) / 2 + 20); //takes the mean value of far left and right sensors and adds some margin to create a threshold
     threshold2 = ((SensorValues[1] + SensorValues[3]) / 2 + 20);
@@ -397,7 +395,7 @@ void CalibrateLineSensors()
     delay(250);
     Serial.println(threshold1); //prints threshold once at the beginning of the code
     Serial.println(threshold2);
-    lcd.clear();
+    LCD.clear();
 }
 
 /// <summary>
@@ -430,12 +428,12 @@ void readSensors(LineSensorsWhite& state)
 void GyroscopeSetup()
 {
     Wire.begin();
-    imu.init();
-    imu.enableDefault();
-    imu.configureForTurnSensing();
+    IMU.init();
+    IMU.enableDefault();
+    IMU.configureForTurnSensing();
 
-    lcd.clear();
-    lcd.print(F("Gyro cal"));
+    LCD.clear();
+    LCD.print(F("Gyro cal"));
 
     // Turn on the yellow LED in case the LCD is not available.
     ledYellow(1);
@@ -448,18 +446,18 @@ void GyroscopeSetup()
     for (uint16_t i = 0; i < 1024; i++)
     {
         // Wait for new data to be available, then read it.
-        while (!imu.gyroDataReady()) {}
-        imu.readGyro();
+        while (!IMU.gyroDataReady()) {}
+        IMU.readGyro();
 
         // Add the Z axis reading to the total.
-        total += imu.g.z;
+        total += IMU.g.z;
     }
     ledYellow(0);
     gyroOffset = total / 1024;
 
     // Display the angle (in degrees from -180 to 180) until the
     // user presses A.
-    lcd.clear();
+    LCD.clear();
 }
 
 
@@ -471,8 +469,8 @@ void GyroscopeReset()
 
 void turnSensorUpdate()
 {
-    imu.readGyro();
-    turnRate = imu.g.z - gyroOffset;
+    IMU.readGyro();
+    turnRate = IMU.g.z - gyroOffset;
     uint16_t m = micros();
     uint16_t dt = m - gyroLastUpdate;
     gyroLastUpdate = m;
