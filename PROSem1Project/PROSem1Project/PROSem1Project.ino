@@ -80,6 +80,9 @@ bool CanDetected = false;
 bool SmallCanDetected = false;
 bool LargeCanDetected = false;
 bool ReturningHome = false;
+bool CanDisposed = false;
+bool ReturnLineFound = false;
+bool ReturnedHome = false;
 
 int DirectionalAngle = NULL;
 int16_t GyroscopeOffset;
@@ -103,16 +106,16 @@ void SetMotorSpeed(int speed1, int rightSpeed = -1) {
 void Turn(char dir, float angleDeg) {
     DebugLog("Turning: " + (String)angleDeg + " degrees to the " + (String)dir + " direction.");
     bool facingDirection = false;
+    GyroscopeReset();
     switch (dir)
     {
     case 'L':
         while (!facingDirection)
         {
             GyroscopeUpdate();
-            TurnAngleDegrees = ((((int32_t)TurnAngle >> 16) * 360) >> 16);
             SetMotorSpeed(-MOTOR_SPEED * 1.2, MOTOR_SPEED);
 
-            if (TurnAngleDegrees >= angleDeg && TurnAngleDegrees <= (angleDeg + 1))
+            if (DirectionalAngle >= angleDeg && (angleDeg) >= DirectionalAngle)
                 facingDirection = true;
         }
         StopMotors();
@@ -123,11 +126,10 @@ void Turn(char dir, float angleDeg) {
         while (!facingDirection)
         {
             GyroscopeUpdate();
-            TurnAngleDegrees = ((((int32_t)TurnAngle >> 16) * 360) >> 16);
-            TurnAngleDegreesInverted = -TurnAngleDegrees; //Because degrees are negative to the right, we have to flip the value to some positive integer
+            //TurnAngleDegreesInverted = -DirectionalAngle; //Because degrees are negative to the right, we have to flip the value to some positive integer
             SetMotorSpeed(MOTOR_SPEED, -MOTOR_SPEED * 1.2);
 
-            if (TurnAngleDegreesInverted >= angleDeg && TurnAngleDegreesInverted <= (angleDeg + 1))
+            if (DirectionalAngle >= angleDeg && (angleDeg) >= DirectionalAngle)
                 facingDirection = true;
         }
         StopMotors();
@@ -141,26 +143,98 @@ void Turn(char dir, float angleDeg) {
 }
 
 void HandleLargeCan() {
-    Turn(ROTATE_RIGHT, 90);
-    /*Turn('R', 90);
-    delay(500);
+    CanDisposed = false;
+    Turn(ROTATE_RIGHT, 270);
     SetMotorSpeed(MOTOR_SPEED * 0.75);
-    delay(1000);
+    delay(3600);
     Turn('L', 90);
-    delay(500);
-    SetMotorSpeed(MOTOR_SPEED * 1.3);
-    delay(500);
-    return;*/
+    delay(250);
+    SetMotorSpeed(MOTOR_SPEED);
+    delay(1200);
+    Turn('L', 90);
+    StopMotors();
+    delay(1000);
+    Turn('R', 345);
+    delay(1000);
+    SetMotorSpeed(MOTOR_SPEED);
+    while (!CanDisposed) {
+        DebugLog("Disposing can..");
+        GetLineSensorData();
+        if (LineSensorStates_.LeftCenter && LineSensorStates_.RightCenter) {
+            DebugLog("Can has been disposed.");
+            CanDisposed = true;
+        }
+    }
+    delay(150);
+    StopMotors();
+    delay(100);
+    Turn('L', 80);
+    delay(200);
+    SetMotorSpeed(MOTOR_SPEED * 0.75);
+    delay(200);
+    while (!ReturnLineFound) {
+        GetLineSensorData();
+        if (LineSensorStates_.Right && !LineSensorStates_.Left) {            
+            ReturnLineFound = true;           
+        }
+    }
+    delay(1300);
+    StopMotors();
+    delay(200);
+    Turn('L', 90);
+    delay(200);
+    SetMotorSpeed(MOTOR_SPEED);
+    while (!ReturnedHome) {
+        GetLineSensorData();
+        if (LineSensorStates_.LeftCenter && LineSensorStates_.RightCenter) {
+            ReturnedHome = true;           
+        }
+    }
+    delay(800);
+    StopMotors();
+    delay(200);
+    Turn('L', 90);
+    delay(200);
+    DetectCan();
 }
 
 void HandleSmallCan() {
-    /*SetMotorSpeed(MOTOR_SPEED * 1.3);
-    delay(500);
-    return;*/
+    CanDisposed = false;
+    ReturnedHome = false;
+
+    SetMotorSpeed(MOTOR_SPEED);
+    while (!CanDisposed) {
+        DebugLog("Disposing can..");
+        GetLineSensorData();
+        if (LineSensorStates_.LeftCenter && LineSensorStates_.RightCenter) {
+            DebugLog("Can has been disposed.");
+            CanDisposed = true;
+        }
+    }
+    delay(150);
+    StopMotors();
+    delay(1000);
+    SetMotorSpeed(-MOTOR_SPEED);
+    //while (!ReturnedHome) {
+    //    GetLineSensorData();
+    //    if (LineSensorStates_.LeftCenter && LineSensorStates_.RightCenter) {
+    //        DebugLog("Can has been disposed.");
+    //        ReturnedHome = true;
+    //    }
+    //}
+    delay(2200);
+    StopMotors();
+    delay(5000);
+    DetectCan();
 }
 
 void DetectCan() 
 {
+    CanDetected = false;
+    LargeCanDetected = false;
+    SmallCanDetected = false;
+    ReturnedHome = false;
+
     DebugLog("About to start logging.");
     while (!CanDetected)
     {
@@ -224,7 +298,7 @@ void GyroscopeSetup() {
 void GyroscopeReset() {
     DebugLog("Gyroscope reset");
     LastGyroscopeUpdate = micros();
-    TurnAngleDegrees = 0;
+    TurnAngle = 0;
 }
 
 void GyroscopeUpdate() {
@@ -238,20 +312,17 @@ void GyroscopeUpdate() {
     uint16_t deltaTime = micros_ - LastGyroscopeUpdate;
     LastGyroscopeUpdate = micros_;
 
-    // Multiply dt by turnRate in order to get an estimation of how
-    // much the robot has turned since the last update.
-    // (angular change = angular velocity * time)
     int32_t d = (int32_t)TurnRate * deltaTime;
-
-    // The units of d are gyro digits times microseconds. We need
-    // to convert those to the units of turnAngle, where 2^29 units
-    // represents 45 degrees. The conversion from gyro digits to
-    // degrees per second (dps) is determined by the sensitivity of
-    // the gyro: 0.07 degrees per second per digit.
-    //
-    // (0.07 dps/digit) * (1/1000000 s/us) * (2^29/45 unit/degree)
-    // = 14680064/17578125 unit/(digit*us)
     TurnAngle += (int64_t)d * 14680064 / 17578125;
+
+    // Converts angle interval from [-180;180] to [0;360]
+    TurnAngleDegrees = ((((int32_t)TurnAngle >> 16) * 360) >> 16);
+    if (TurnAngleDegrees <= 0 && TurnAngleDegrees >= -180) {
+        DirectionalAngle = (360 + TurnAngleDegrees);
+    }
+    if (TurnAngleDegrees >= 0 && TurnAngleDegrees <= 180) {
+        DirectionalAngle = TurnAngleDegrees;
+    }
 }
 
 void GetLineSensorData() {
@@ -347,7 +418,7 @@ void loop()
         DebugLog((String)TurnAngleDegrees);
         SetMotorSpeed(0);
         delay(250);
-        Turn(ROTATE_RIGHT, 90);
+        Turn(ROTATE_RIGHT, 270);
         delay(500);
         SetMotorSpeed(MOTOR_SPEED * 0.5);
 
@@ -363,8 +434,7 @@ void loop()
         }
         DebugLog((String)TurnAngleDegrees);
         StopMotors();
-        DebugLog("Time for a break lel xd");
-        GyroscopeReset();
+        DebugLog("Time for a break lel xd");        
         delay(5000);
 
         DetectCan();
