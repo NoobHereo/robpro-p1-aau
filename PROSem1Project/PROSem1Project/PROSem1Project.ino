@@ -141,7 +141,6 @@ void Turn(char dir, float angleDeg) {
 }
 
 void HandleLargeCan() {
-    GyroscopeReset();
     Turn(ROTATE_RIGHT, 90);
     /*Turn('R', 90);
     delay(500);
@@ -223,8 +222,9 @@ void GyroscopeSetup() {
 }
 
 void GyroscopeReset() {
+    DebugLog("Gyroscope reset");
     LastGyroscopeUpdate = micros();
-    DirectionalAngle = NULL;
+    TurnAngleDegrees = 0;
 }
 
 void GyroscopeUpdate() {
@@ -334,7 +334,8 @@ void loop()
     {        
         while (!FirstLineFound)
         {
-            DebugLog("Searching for the first line");
+            DebugLog((String)TurnAngleDegrees);
+            //DebugLog("Searching for the first line");
             GetLineSensorData();
             if (LineSensorStates_.LeftCenter && LineSensorStates_.RightCenter) {
                 DebugLog("First line found!");
@@ -343,6 +344,7 @@ void loop()
             delay(250);
         }
 
+        DebugLog((String)TurnAngleDegrees);
         SetMotorSpeed(0);
         delay(250);
         Turn(ROTATE_RIGHT, 90);
@@ -350,15 +352,19 @@ void loop()
         SetMotorSpeed(MOTOR_SPEED * 0.5);
 
         while (!CanDetectLineFound) {
-            DebugLog("Looking for line 2");
+            DebugLog((String)TurnAngleDegrees);
+            // GyroscopeReset();
+            // DebugLog("Looking for line 2");
             GetLineSensorData();
             if (LineSensorStates_.LeftCenter && LineSensorStates_.RightCenter) {                
                 CanDetectLineFound = true;                
             }
             delay(100);
         }
+        DebugLog((String)TurnAngleDegrees);
         StopMotors();
         DebugLog("Time for a break lel xd");
+        GyroscopeReset();
         delay(5000);
 
         DetectCan();
