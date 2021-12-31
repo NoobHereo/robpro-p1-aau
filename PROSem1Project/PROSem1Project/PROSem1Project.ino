@@ -12,11 +12,20 @@
 #define SERIAL_FREQUENCY 9600
 #define MOTOR_SPEED 100
 #define NUM_SENSORS 5
+#define ROTATE_LEFT 'L'
+#define ROTATE_RIGHT 'R'
+
+#define LEFT_SENSOR 0
+#define CENTER_LEFT_SENSOR 1
+#define CENTER_SENSOR 2
+#define CENTER_RIGHT_SENSOR 3
+#define RIGHT_SENSOR 4
 
 Zumo32U4Motors Motors;
 Zumo32U4LineSensors LineSensors;
 Zumo32U4LCD LCD;
 Zumo32U4ButtonA ButtonA;
+Zumo32U4IMU IMU;
 
 void LCDDebug(String text, bool newLine = true) {
     if (DEBUG_MODE) {
@@ -57,14 +66,52 @@ struct LineSensorStates
 };
 
 LineSensorStates LineSensorStates_ = { false, false, false, false, false };
-int outerThreshold;
-int innerThreshold;
-int centerThreshold;
-
+int outerThreshold = NULL;
+int innerThreshold = NULL;
+int centerThreshold = NULL;
 bool UseEmitters = true;
+
 bool Operating = false;
 bool FirstLineFound = false;
 bool CanDetectLineFound = false;
+
+int DirectionalAngle = NULL;
+int16_t GyrscopeOffset;
+uint16_t LastGyroscopeUpdate;
+
+void GyroscopeSetup() {
+    Wire.begin();
+    IMU.init();
+    IMU.enableDefault();
+    IMU.configureForTurnSensing();
+
+    LCDDebug("IMU Cal..");
+    ledYellow(true);
+    delay(250);
+
+    int32_t totalReadings = 0;
+    int sampleIterations = 1024;
+    for (uint16_t iteration = 0; iteration < sampleIterations; iteration++) 
+    {
+        if (!IMU.gyroDataReady()) {
+            return;
+        }
+
+        IMU.readGyro();
+        totalReadings += IMU.g.z;
+    }
+    GyrscopeOffset = totalReadings / sampleIterations;
+    GyroscopeReset();
+    delay(250);
+
+    ledYellow(false);
+    LCD.clear();
+}
+
+void GyroscopeReset() {
+    LastGyroscopeUpdate = micros();
+    DirectionalAngle = NULL;
+}
 
 void GetLineSensorData() {
     LineSensors.read(SensorValues, UseEmitters ? QTR_EMITTERS_ON : QTR_EMITTERS_OFF);
@@ -94,23 +141,29 @@ void CalibrateLineSensors() {
     ButtonA.waitForPress();
     LCDDebug("Calibr...");
 
+    ledYellow(true);
     GetLineSensorData();
-    outerThreshold = (SensorValues[0] + SensorValues[4] / 2) + 20;
-    innerThreshold = (SensorValues[1] + SensorValues[3] / 2) + 20;
-    centerThreshold = SensorValues[2] + 20;
+    outerThreshold = (SensorValues[LEFT_SENSOR] + SensorValues[RIGHT_SENSOR] / 2) + 20;
+    innerThreshold = (SensorValues[CENTER_LEFT_SENSOR] + SensorValues[CENTER_RIGHT_SENSOR] / 2) + 20;
+    centerThreshold = SensorValues[CENTER_SENSOR] + 20;
     delay(250);
 
+    ledYellow(false);
     LCD.clear();
 }
 
 bool ConfigureComponents() {
   LCD.init();
-
   LineSensors.initFiveSensors();
   CalibrateLineSensors();
+  GyroscopeSetup();
 
   DebugLog("Finished configuring..");
   return true;
+}
+
+void Turn(char dir, float angleDeg) {
+    DebugLog("Turning: " + (String)angleDeg + " degrees to the " + (String)dir + " direction.");
 }
 
 void SetMotorSpeed(int speed1, int rightSpeed = -1) {
@@ -157,7 +210,7 @@ void loop()
         }
 
         SetMotorSpeed(0);
-        // Turn and drive to second line.
+        Turn(ROTATE_RIGHT, 90);
         while (!CanDetectLineFound) {
             DebugLog("Looking for can detection line...");
 
