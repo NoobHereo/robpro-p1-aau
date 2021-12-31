@@ -43,9 +43,10 @@ bool LCDCountdown(int count) {
     return true;
 }
 
-void DebugLog(String text, bool newLine = true) {
+void DebugLog(String text, bool error = false, bool newLine = true) {
     if (DEBUG_MODE) {
-        Serial.println("[DEBUG]: " + text);
+        String tag = error ? "[ERROR]: " : "[DEBUG]: ";
+        Serial.println(tag + text);
     }
 }
 
@@ -76,8 +77,12 @@ bool FirstLineFound = false;
 bool CanDetectLineFound = false;
 
 int DirectionalAngle = NULL;
-int16_t GyrscopeOffset;
+int16_t GyroscopeOffset;
 uint16_t LastGyroscopeUpdate;
+int16_t TurnRate;
+uint32_t TurnAngle;
+int TurnAngleDegrees;
+int TurnAngleDegreesInverted;
 
 void GyroscopeSetup() {
     Wire.begin();
@@ -100,7 +105,7 @@ void GyroscopeSetup() {
         IMU.readGyro();
         totalReadings += IMU.g.z;
     }
-    GyrscopeOffset = totalReadings / sampleIterations;
+    GyroscopeOffset = totalReadings / sampleIterations;
     GyroscopeReset();
     delay(250);
 
@@ -113,24 +118,51 @@ void GyroscopeReset() {
     DirectionalAngle = NULL;
 }
 
+void GyroscopeUpdate() {
+    if (!IMU.gyroDataReady()) {
+        return;
+    }
+
+    IMU.readGyro();
+    TurnRate = IMU.g.z - GyroscopeOffset;
+    uint16_t micros_ = micros();
+    uint16_t deltaTime = micros_ - LastGyroscopeUpdate;
+    LastGyroscopeUpdate = micros_;
+
+    // Multiply dt by turnRate in order to get an estimation of how
+    // much the robot has turned since the last update.
+    // (angular change = angular velocity * time)
+    int32_t d = (int32_t)TurnRate * deltaTime;
+
+    // The units of d are gyro digits times microseconds. We need
+    // to convert those to the units of turnAngle, where 2^29 units
+    // represents 45 degrees. The conversion from gyro digits to
+    // degrees per second (dps) is determined by the sensitivity of
+    // the gyro: 0.07 degrees per second per digit.
+    //
+    // (0.07 dps/digit) * (1/1000000 s/us) * (2^29/45 unit/degree)
+    // = 14680064/17578125 unit/(digit*us)
+    TurnAngle += (int64_t)d * 14680064 / 17578125;
+}
+
 void GetLineSensorData() {
     LineSensors.read(SensorValues, UseEmitters ? QTR_EMITTERS_ON : QTR_EMITTERS_OFF);
     LineSensorStates_.SetAllValues(false);
     LineSensorStates_.LogStates();
     
-    if (SensorValues[0] < outerThreshold) {
+    if (SensorValues[LEFT_SENSOR] < outerThreshold) {
         LineSensorStates_.Left = true;
     }
-    if (SensorValues[1] < innerThreshold) {
+    if (SensorValues[CENTER_LEFT_SENSOR] < innerThreshold) {
         LineSensorStates_.LeftCenter = true;
     }
-    if (SensorValues[2] < centerThreshold) {
+    if (SensorValues[CENTER_SENSOR] < centerThreshold) {
         LineSensorStates_.Center = true;
     }
-    if (SensorValues[3] < innerThreshold) {
+    if (SensorValues[CENTER_RIGHT_SENSOR] < innerThreshold) {
         LineSensorStates_.RightCenter = true;
     }
-    if (SensorValues[4] < outerThreshold) {
+    if (SensorValues[RIGHT_SENSOR] < outerThreshold) {
         LineSensorStates_.Right = true;
     }
 }
@@ -162,8 +194,8 @@ bool ConfigureComponents() {
   return true;
 }
 
-void Turn(char dir, float angleDeg) {
-    DebugLog("Turning: " + (String)angleDeg + " degrees to the " + (String)dir + " direction.");
+void StopMotors() {
+    Motors.setSpeeds(0, 0);
 }
 
 void SetMotorSpeed(int speed1, int rightSpeed = -1) {
@@ -173,6 +205,46 @@ void SetMotorSpeed(int speed1, int rightSpeed = -1) {
   else {
     Motors.setSpeeds(speed1, rightSpeed);
   }
+}
+
+void Turn(char dir, float angleDeg) {
+    DebugLog("Turning: " + (String)angleDeg + " degrees to the " + (String)dir + " direction.");
+    bool facingDirection = false;
+    switch (dir) 
+    {
+    case 'L':
+        while (!facingDirection)
+        {
+            GyroscopeUpdate();
+            TurnAngleDegrees = ((((int32_t)TurnAngle >> 16) * 360) >> 16);
+            SetMotorSpeed(-MOTOR_SPEED * 1.2, MOTOR_SPEED);
+
+            if (TurnAngleDegrees >= angleDeg && TurnAngleDegrees <= (angleDeg + 1))
+                facingDirection = true;
+        }
+        StopMotors();
+        DebugLog("Rotation done");
+        break;
+
+    case 'R':
+        while (!facingDirection)
+        {
+            GyroscopeUpdate();
+            TurnAngleDegrees = ((((int32_t)TurnAngle >> 16) * 360) >> 16);
+            TurnAngleDegreesInverted = -TurnAngleDegrees; //Because degrees are negative to the right, we have to flip the value to some positive integer
+            SetMotorSpeed(MOTOR_SPEED, -MOTOR_SPEED * 1.2);
+
+            if (TurnAngleDegreesInverted >= angleDeg && TurnAngleDegreesInverted <= (angleDeg + 1))
+                facingDirection = true;
+        }
+        StopMotors();
+        DebugLog("Rotation done");
+        break;
+
+    default:
+        DebugLog("Unhandled rotational direction: " + dir, true);
+        break;
+    }
 }
 
 void setup() { 
@@ -210,12 +282,18 @@ void loop()
         }
 
         SetMotorSpeed(0);
+        delay(250);
         Turn(ROTATE_RIGHT, 90);
+        delay(500);
+        SetMotorSpeed(MOTOR_SPEED);
         while (!CanDetectLineFound) {
-            DebugLog("Looking for can detection line...");
-
-            delay(1250);
+            GetLineSensorData();
+            if (LineSensorStates_.Left && LineSensorStates_.Right) {
+                CanDetectLineFound = true;
+            }
+            //delay(250);
         }
+        StopMotors();
     }
 
     DebugLog("Found line!");
