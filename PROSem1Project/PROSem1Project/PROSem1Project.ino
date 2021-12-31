@@ -26,6 +26,7 @@ Zumo32U4LineSensors LineSensors;
 Zumo32U4LCD LCD;
 Zumo32U4ButtonA ButtonA;
 Zumo32U4IMU IMU;
+Zumo32U4ProximitySensors ProximitySensors;
 
 void LCDDebug(String text, bool newLine = true) {
     if (DEBUG_MODE) {
@@ -75,6 +76,10 @@ bool UseEmitters = true;
 bool Operating = false;
 bool FirstLineFound = false;
 bool CanDetectLineFound = false;
+bool CanDetected = false;
+bool SmallCanDetected = false;
+bool LargeCanDetected = false;
+bool ReturningHome = false;
 
 int DirectionalAngle = NULL;
 int16_t GyroscopeOffset;
@@ -83,6 +88,110 @@ int16_t TurnRate;
 uint32_t TurnAngle;
 int TurnAngleDegrees;
 int TurnAngleDegreesInverted;
+
+uint16_t BrightnessLevels[4] = { 1, 2, 3, 4 };
+
+void SetMotorSpeed(int speed1, int rightSpeed = -1) {
+    if (rightSpeed == -1) {
+        Motors.setSpeeds(speed1, speed1);
+    }
+    else {
+        Motors.setSpeeds(speed1, rightSpeed);
+    }
+}
+
+void Turn(char dir, float angleDeg) {
+    DebugLog("Turning: " + (String)angleDeg + " degrees to the " + (String)dir + " direction.");
+    bool facingDirection = false;
+    switch (dir)
+    {
+    case 'L':
+        while (!facingDirection)
+        {
+            GyroscopeUpdate();
+            TurnAngleDegrees = ((((int32_t)TurnAngle >> 16) * 360) >> 16);
+            SetMotorSpeed(-MOTOR_SPEED * 1.2, MOTOR_SPEED);
+
+            if (TurnAngleDegrees >= angleDeg && TurnAngleDegrees <= (angleDeg + 1))
+                facingDirection = true;
+        }
+        StopMotors();
+        DebugLog("Rotation done");
+        break;
+
+    case 'R':
+        while (!facingDirection)
+        {
+            GyroscopeUpdate();
+            TurnAngleDegrees = ((((int32_t)TurnAngle >> 16) * 360) >> 16);
+            TurnAngleDegreesInverted = -TurnAngleDegrees; //Because degrees are negative to the right, we have to flip the value to some positive integer
+            SetMotorSpeed(MOTOR_SPEED, -MOTOR_SPEED * 1.2);
+
+            if (TurnAngleDegreesInverted >= angleDeg && TurnAngleDegreesInverted <= (angleDeg + 1))
+                facingDirection = true;
+        }
+        StopMotors();
+        DebugLog("Rotation done");
+        break;
+
+    default:
+        DebugLog("Unhandled rotational direction: " + dir, true);
+        break;
+    }
+}
+
+void HandleLargeCan() {
+    GyroscopeReset();
+    Turn(ROTATE_RIGHT, 90);
+    /*Turn('R', 90);
+    delay(500);
+    SetMotorSpeed(MOTOR_SPEED * 0.75);
+    delay(1000);
+    Turn('L', 90);
+    delay(500);
+    SetMotorSpeed(MOTOR_SPEED * 1.3);
+    delay(500);
+    return;*/
+}
+
+void HandleSmallCan() {
+    /*SetMotorSpeed(MOTOR_SPEED * 1.3);
+    delay(500);
+    return;*/
+}
+
+void DetectCan() 
+{
+    DebugLog("About to start logging.");
+    while (!CanDetected)
+    {
+        DebugLog("Looking for can");
+        ProximitySensors.read();
+        int center_left_sensor = ProximitySensors.countsFrontWithLeftLeds();
+        int center_right_sensor = ProximitySensors.countsFrontWithRightLeds();
+
+        if (center_left_sensor >= 4 && center_right_sensor >= 4) {
+            DebugLog("Found large can");
+            HandleLargeCan();
+            LargeCanDetected = false;
+            CanDetected = true;
+        }
+        else if (center_left_sensor <= 3 && center_right_sensor <= 3)
+        {
+            DebugLog("Found small can");
+            HandleSmallCan();
+            SmallCanDetected = false;
+            CanDetected = true;
+        }
+
+        delay(250);
+    }
+}
+
+void ProximitySensorSetup() {
+    ProximitySensors.initThreeSensors();
+    ProximitySensors.setBrightnessLevels(BrightnessLevels, 4);
+}
 
 void GyroscopeSetup() {
     Wire.begin();
@@ -148,7 +257,7 @@ void GyroscopeUpdate() {
 void GetLineSensorData() {
     LineSensors.read(SensorValues, UseEmitters ? QTR_EMITTERS_ON : QTR_EMITTERS_OFF);
     LineSensorStates_.SetAllValues(false);
-    LineSensorStates_.LogStates();
+    // LineSensorStates_.LogStates();
     
     if (SensorValues[LEFT_SENSOR] < outerThreshold) {
         LineSensorStates_.Left = true;
@@ -188,6 +297,7 @@ bool ConfigureComponents() {
   LCD.init();
   LineSensors.initFiveSensors();
   CalibrateLineSensors();
+  ProximitySensorSetup();
   GyroscopeSetup();
 
   DebugLog("Finished configuring..");
@@ -196,55 +306,7 @@ bool ConfigureComponents() {
 
 void StopMotors() {
     Motors.setSpeeds(0, 0);
-}
-
-void SetMotorSpeed(int speed1, int rightSpeed = -1) {
-  if (rightSpeed == -1) {
-    Motors.setSpeeds(speed1, speed1);
-  }
-  else {
-    Motors.setSpeeds(speed1, rightSpeed);
-  }
-}
-
-void Turn(char dir, float angleDeg) {
-    DebugLog("Turning: " + (String)angleDeg + " degrees to the " + (String)dir + " direction.");
-    bool facingDirection = false;
-    switch (dir) 
-    {
-    case 'L':
-        while (!facingDirection)
-        {
-            GyroscopeUpdate();
-            TurnAngleDegrees = ((((int32_t)TurnAngle >> 16) * 360) >> 16);
-            SetMotorSpeed(-MOTOR_SPEED * 1.2, MOTOR_SPEED);
-
-            if (TurnAngleDegrees >= angleDeg && TurnAngleDegrees <= (angleDeg + 1))
-                facingDirection = true;
-        }
-        StopMotors();
-        DebugLog("Rotation done");
-        break;
-
-    case 'R':
-        while (!facingDirection)
-        {
-            GyroscopeUpdate();
-            TurnAngleDegrees = ((((int32_t)TurnAngle >> 16) * 360) >> 16);
-            TurnAngleDegreesInverted = -TurnAngleDegrees; //Because degrees are negative to the right, we have to flip the value to some positive integer
-            SetMotorSpeed(MOTOR_SPEED, -MOTOR_SPEED * 1.2);
-
-            if (TurnAngleDegreesInverted >= angleDeg && TurnAngleDegreesInverted <= (angleDeg + 1))
-                facingDirection = true;
-        }
-        StopMotors();
-        DebugLog("Rotation done");
-        break;
-
-    default:
-        DebugLog("Unhandled rotational direction: " + dir, true);
-        break;
-    }
+    DebugLog("Stopped motors");
 }
 
 void setup() { 
@@ -272,9 +334,9 @@ void loop()
     {        
         while (!FirstLineFound)
         {
-            DebugLog("Searching...");
+            DebugLog("Searching for the first line");
             GetLineSensorData();
-            if (LineSensorStates_.Left && LineSensorStates_.Right) {
+            if (LineSensorStates_.LeftCenter && LineSensorStates_.RightCenter) {
                 DebugLog("First line found!");
                 FirstLineFound = true;
             }
@@ -285,17 +347,21 @@ void loop()
         delay(250);
         Turn(ROTATE_RIGHT, 90);
         delay(500);
-        SetMotorSpeed(MOTOR_SPEED);
+        SetMotorSpeed(MOTOR_SPEED * 0.5);
 
         while (!CanDetectLineFound) {
+            DebugLog("Looking for line 2");
             GetLineSensorData();
-            if (LineSensorStates_.Left && LineSensorStates_.Right) {
-                CanDetectLineFound = true;
-                StopMotors();
+            if (LineSensorStates_.LeftCenter && LineSensorStates_.RightCenter) {                
+                CanDetectLineFound = true;                
             }
-            delay(250);
+            delay(100);
         }
+        StopMotors();
+        DebugLog("Time for a break lel xd");
+        delay(5000);
 
+        DetectCan();
         Operating = false;
     }
 }
