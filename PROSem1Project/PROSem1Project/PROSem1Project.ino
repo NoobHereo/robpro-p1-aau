@@ -286,16 +286,16 @@ void loop()
         Turn(ROTATE_RIGHT, 90);
         delay(500);
         SetMotorSpeed(MOTOR_SPEED);
+
         while (!CanDetectLineFound) {
             GetLineSensorData();
             if (LineSensorStates_.Left && LineSensorStates_.Right) {
                 CanDetectLineFound = true;
+                StopMotors();
             }
-            //delay(250);
+            delay(250);
         }
-        StopMotors();
-    }
 
-    DebugLog("Found line!");
-    delay(500);
+        Operating = false;
+    }
 }
