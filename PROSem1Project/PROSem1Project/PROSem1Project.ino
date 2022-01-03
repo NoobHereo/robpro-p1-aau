@@ -215,13 +215,6 @@ void HandleSmallCan() {
     StopMotors();
     delay(1000);
     SetMotorSpeed(-MOTOR_SPEED);
-    //while (!ReturnedHome) {
-    //    GetLineSensorData();
-    //    if (LineSensorStates_.LeftCenter && LineSensorStates_.RightCenter) {
-    //        DebugLog("Can has been disposed.");
-    //        ReturnedHome = true;
-    //    }
-    //}
     delay(2200);
     StopMotors();
     delay(5000);
@@ -405,8 +398,7 @@ void loop()
     {        
         while (!FirstLineFound)
         {
-            DebugLog((String)TurnAngleDegrees);
-            //DebugLog("Searching for the first line");
+            DebugLog("Searching for the first line");
             GetLineSensorData();
             if (LineSensorStates_.LeftCenter && LineSensorStates_.RightCenter) {
                 DebugLog("First line found!");
@@ -424,17 +416,15 @@ void loop()
 
         while (!CanDetectLineFound) {
             DebugLog((String)TurnAngleDegrees);
-            // GyroscopeReset();
-            // DebugLog("Looking for line 2");
             GetLineSensorData();
-            if (LineSensorStates_.LeftCenter && LineSensorStates_.RightCenter) {                
+            if (LineSensorStates_.LeftCenter && LineSensorStates_.RightCenter) {
+                DebugLog("Found line");
                 CanDetectLineFound = true;                
             }
             delay(100);
         }
         DebugLog((String)TurnAngleDegrees);
-        StopMotors();
-        DebugLog("Time for a break lel xd");        
+        StopMotors();       
         delay(5000);
 
         DetectCan();
