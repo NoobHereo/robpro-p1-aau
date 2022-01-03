@@ -5,6 +5,7 @@
 
  ---- Links ----
  (1) zumo32u4 library by Pololu: https://github.com/pololu/zumo-32u4-arduino-library/blob/master/examples/MazeSolver/TurnSensor.h
+ (2) demonstration of the final product: https://www.youtube.com/watch?v=YZVRyMfajOA&ab_channel=NikolajKrebs
  -----------------
 */
 
