@@ -1,2 +1,3 @@
-# PROSem1Project
-Robotics programming first semester project: Can detection robot that can sort size based objects into two different containers, using the Zumo32U4.
+# robpro-p1-aau
+Written in Visual Studio using VMicro and the Zumo32U4 Libraries.
+The Arduino IDE can be used with the .gitignore in this repository.
